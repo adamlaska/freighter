@@ -74,7 +74,7 @@
     "eslint": "7.12.1",
     "eslint-config-prettier": "^6.10.0",
     "eslint-config-react-app": "^5.2.1",
-    "eslint-import-resolver-typescript": "^2.0.0",
+    "eslint-import-resolver-typescript": "^3.0.0",
     "eslint-plugin-flowtype": "4.x",
     "eslint-plugin-import": "^2.22.1",
     "eslint-plugin-jsx-a11y": "6.x",
@@ -94,9 +94,9 @@
     "pretty-quick": "^2.0.1",
     "ts-loader": "8.0.7",
     "typescript": "^4.2.3",
-    "webpack": "4.41.5",
+    "webpack": "5.1.1",
     "webpack-cli": "3.3.10",
-    "webpack-dev-server": "3.10.3",
+    "webpack-dev-server": "4.0.0",
     "webpack-merge": "4.2.2"
   }
 }
