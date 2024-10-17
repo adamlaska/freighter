@@ -1,7 +1,8 @@
-import StellarSdk, { StellarTomlResolver } from "stellar-sdk";
+import { StellarToml, StrKey } from "stellar-sdk";
 import { sendMessageToBackground } from "./extensionMessaging";
+import { stellarSdkServer } from "./stellarSdkServer";
 import { SERVICE_TYPES } from "../../constants/services";
-import { NetworkDetails } from "../../helpers/stellar";
+import { NetworkDetails } from "../../constants/stellar";
 
 /* 
 This runs a slightly convoluted process to find an icon's url. 
@@ -42,7 +43,7 @@ export const getIconUrlFromIssuer = async ({
   try {
     /* First, check our localStorage cache in Background to see if we've found this url before */
     ({ iconUrl } = await sendMessageToBackground({
-      assetCode: code,
+      assetCanonical: `${code}:${key}`,
       type: SERVICE_TYPES.GET_CACHED_ASSET_ICON,
     }));
     if (iconUrl) {
@@ -55,8 +56,12 @@ export const getIconUrlFromIssuer = async ({
 
   try {
     /* Otherwise, 1. load their account from the API */
-    const { networkUrl } = networkDetails;
-    const server = new StellarSdk.Server(networkUrl);
+    const { networkUrl, networkPassphrase } = networkDetails;
+    const server = stellarSdkServer(networkUrl, networkPassphrase);
+    if (!StrKey.isValidEd25519PublicKey(key)) {
+      return iconUrl;
+    }
+
     response = await server.loadAccount(key);
   } catch (e) {
     return iconUrl;
@@ -67,7 +72,10 @@ export const getIconUrlFromIssuer = async ({
 
   try {
     /* 2. Use their domain from their API account and use it attempt to load their stellar.toml */
-    toml = await StellarTomlResolver.resolve(homeDomain);
+    if (!homeDomain) {
+      return iconUrl;
+    }
+    toml = await StellarToml.Resolver.resolve(homeDomain);
   } catch (e) {
     console.error(e);
     return iconUrl;
@@ -75,28 +83,20 @@ export const getIconUrlFromIssuer = async ({
 
   if (toml.CURRENCIES) {
     /* If we find some currencies listed, check to see if they have the currency we're looking for listed */
-    toml.CURRENCIES.every(
-      async ({
-        code: currencyCode,
-        image,
-      }: {
-        code: string;
-        image: string;
-      }) => {
-        if (currencyCode === code && image) {
-          /* We found the currency listing in the toml. 3. Get the image url from it */
-          iconUrl = image;
-          /* And also save into the cache to prevent having to do this process again */
-          await sendMessageToBackground({
-            assetCode: code,
-            iconUrl,
-            type: SERVICE_TYPES.CACHE_ASSET_ICON,
-          });
-          return false;
-        }
-        return true;
-      },
-    );
+    toml.CURRENCIES.every(async ({ code: currencyCode, issuer, image }) => {
+      if (currencyCode === code && issuer === key && image) {
+        /* We found the currency listing in the toml. 3. Get the image url from it */
+        iconUrl = image;
+        /* And also save into the cache to prevent having to do this process again */
+        await sendMessageToBackground({
+          assetCanonical: `${code}:${key}`,
+          iconUrl,
+          type: SERVICE_TYPES.CACHE_ASSET_ICON,
+        });
+        return false;
+      }
+      return true;
+    });
   }
   /* Return the icon url to the UI, if we found it */
   return iconUrl;

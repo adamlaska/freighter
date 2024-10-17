@@ -23,14 +23,23 @@
     ]
   },
   "dependencies": {
-    "@docusaurus/core": "2.0.0-alpha.68",
-    "@docusaurus/preset-classic": "2.0.0-alpha.68",
-    "@mdx-js/react": "^1.6.19",
-    "@stellar/freighter-api": "1.1.2",
+    "@docusaurus/core": "3.5.2",
+    "@docusaurus/preset-classic": "3.5.2",
+    "@stellar/freighter-api": "3.0.0",
     "clsx": "^1.1.1",
-    "react": "^16.8.4",
-    "react-dom": "^16.8.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-is": "^16.13.1",
     "styled-components": "^5.0.1"
+  },
+  "devDependencies": {
+    "@lavamoat/allow-scripts": "^2.3.1"
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "@docusaurus/core>@babel/runtime-corejs3>core-js-pure": false,
+      "@docusaurus/core>core-js": false,
+      "@docusaurus/core>file-loader>webpack>watchpack>watchpack-chokidar2>chokidar>fsevents": false
+    }
   }
 }

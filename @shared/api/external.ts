@@ -1,9 +1,16 @@
 import { EXTERNAL_SERVICE_TYPES } from "../constants/services";
-import { NETWORKS } from "../constants/stellar";
-import { sendMessageToContentScript } from "./helpers/extensionMessaging";
+import { NetworkDetails } from "../constants/stellar";
+import {
+  sendMessageToContentScript,
+  FreighterApiInternalError,
+} from "./helpers/extensionMessaging";
+import { FreighterApiError } from "./types";
 
-export const requestPublicKey = async (): Promise<string> => {
-  let response = { publicKey: "", error: "" };
+export const requestAccess = async (): Promise<{
+  publicKey: string;
+  error?: FreighterApiError;
+}> => {
+  let response;
   try {
     response = await sendMessageToContentScript({
       type: EXTERNAL_SERVICE_TYPES.REQUEST_ACCESS,
@@ -12,54 +19,271 @@ export const requestPublicKey = async (): Promise<string> => {
     console.error(e);
   }
 
-  const { publicKey, error } = response;
+  const { publicKey } = response || { publicKey: "" };
 
-  if (error) {
-    throw error;
+  return { publicKey, error: response?.apiError };
+};
+
+export const requestPublicKey = async (): Promise<{
+  publicKey: string;
+  error?: FreighterApiError;
+}> => {
+  let response;
+  try {
+    response = await sendMessageToContentScript({
+      type: EXTERNAL_SERVICE_TYPES.REQUEST_PUBLIC_KEY,
+    });
+  } catch (e) {
+    console.error(e);
   }
-  return publicKey;
+
+  return { publicKey: response?.publicKey || "", error: response?.apiError };
 };
 
 export const submitTransaction = async (
   transactionXdr: string,
-  network?: string,
-): Promise<string> => {
-  let response = { signedTransaction: "", error: "" };
-  if (network && network !== NETWORKS.PUBLIC && network !== NETWORKS.TESTNET) {
-    const error = `Network must be ${NETWORKS.PUBLIC} or ${NETWORKS.TESTNET}`;
-    throw error;
+  opts?:
+    | string
+    | {
+        accountToSign?: string;
+        networkPassphrase?: string;
+      },
+  accountToSign?: string,
+): Promise<{
+  signedTransaction: string;
+  signerAddress: string;
+  error?: FreighterApiError;
+}> => {
+  let network = "";
+  let _accountToSign = "";
+  let networkPassphrase = "";
+
+  /* 
+  As of v1.3.0, this method now accepts an object as its second param. 
+  Previously, it accepted optional second and third string parameters.
+  This logic maintains backwards compatibility for older versions
+  */
+  if (typeof opts === "object") {
+    _accountToSign = opts.accountToSign || "";
+    networkPassphrase = opts.networkPassphrase || "";
+  } else {
+    network = opts || "";
+    _accountToSign = accountToSign || "";
   }
+
+  let response;
   try {
     response = await sendMessageToContentScript({
       transactionXdr,
       network,
+      networkPassphrase,
+      accountToSign: _accountToSign,
       type: EXTERNAL_SERVICE_TYPES.SUBMIT_TRANSACTION,
     });
   } catch (e) {
-    console.error(e);
+    return {
+      signedTransaction: "",
+      signerAddress: "",
+      error: FreighterApiInternalError,
+    };
   }
-  const { signedTransaction, error } = response;
+  const { signedTransaction, signerAddress } = response;
 
-  if (error) {
-    throw error;
-  }
-  return signedTransaction;
+  return { signedTransaction, signerAddress, error: response?.apiError };
 };
 
-export const requestNetwork = async (): Promise<string> => {
-  let response = { network: "", error: "" };
+export const submitMessage = async (
+  blob: string,
+  opts?: {
+    address?: string;
+    networkPassphrase?: string;
+  },
+): Promise<{
+  signedMessage: Buffer | null;
+  signerAddress: string;
+  error?: FreighterApiError;
+}> => {
+  let response;
+  const _opts = opts || {};
+  const accountToSign = _opts.address || "";
   try {
     response = await sendMessageToContentScript({
-      type: EXTERNAL_SERVICE_TYPES.REQUEST_NETWORK,
+      blob,
+      accountToSign,
+      type: EXTERNAL_SERVICE_TYPES.SUBMIT_BLOB,
+    });
+  } catch (e) {
+    return {
+      signedMessage: null,
+      signerAddress: "",
+      error: FreighterApiInternalError,
+    };
+  }
+  const { signedBlob, signerAddress } = response;
+
+  return {
+    signedMessage: signedBlob || null,
+    signerAddress,
+    error: response?.apiError,
+  };
+};
+
+export const submitAuthEntry = async (
+  entryXdr: string,
+  opts?: {
+    address?: string;
+    networkPassphrase?: string;
+  },
+): Promise<{
+  signedAuthEntry: Buffer | null;
+  signerAddress: string;
+  error?: FreighterApiError;
+}> => {
+  const _opts = opts || {};
+  const accountToSign = _opts.address || "";
+  let response;
+  try {
+    response = await sendMessageToContentScript({
+      entryXdr,
+      accountToSign,
+      networkPassphrase: opts?.networkPassphrase,
+      type: EXTERNAL_SERVICE_TYPES.SUBMIT_AUTH_ENTRY,
+    });
+  } catch (e) {
+    console.error(e);
+    return {
+      signedAuthEntry: null,
+      signerAddress: "",
+      error: FreighterApiInternalError,
+    };
+  }
+  const { signedAuthEntry, signerAddress } = response;
+
+  return {
+    signedAuthEntry: signedAuthEntry || null,
+    signerAddress,
+    error: response?.apiError,
+  };
+};
+
+export const requestNetwork = async (): Promise<{
+  network: string;
+  networkPassphrase: string;
+  error?: FreighterApiError;
+}> => {
+  let response;
+  try {
+    response = await sendMessageToContentScript({
+      type: EXTERNAL_SERVICE_TYPES.REQUEST_NETWORK_DETAILS,
     });
   } catch (e) {
     console.error(e);
   }
 
-  const { network, error } = response;
+  const { networkDetails } = response || {
+    networkDetails: { network: "", networkPassphrase: "" },
+  };
 
-  if (error) {
-    throw error;
+  return {
+    network: networkDetails?.network,
+    networkPassphrase: networkDetails?.networkPassphrase,
+    error: response?.apiError,
+  };
+};
+
+export const requestNetworkDetails = async (): Promise<{
+  network: string;
+  networkUrl: string;
+  networkPassphrase: string;
+  sorobanRpcUrl?: string;
+  error?: FreighterApiError;
+}> => {
+  let response;
+  try {
+    response = await sendMessageToContentScript({
+      type: EXTERNAL_SERVICE_TYPES.REQUEST_NETWORK_DETAILS,
+    });
+  } catch (e) {
+    console.error(e);
   }
-  return network;
+
+  const { networkDetails, apiError } = response || {
+    networkDetails: {
+      network: "",
+      networkName: "",
+      networkUrl: "",
+      networkPassphrase: "",
+      sorobanRpcUrl: undefined,
+      apiError: "",
+    } as NetworkDetails,
+  };
+
+  const { network, networkUrl, networkPassphrase, sorobanRpcUrl } =
+    networkDetails;
+
+  return {
+    network,
+    networkUrl,
+    networkPassphrase,
+    sorobanRpcUrl,
+    error: apiError,
+  };
+};
+
+export const requestConnectionStatus = async (): Promise<{
+  isConnected: boolean;
+}> => {
+  let response = {
+    isConnected: false,
+  };
+
+  try {
+    response = await sendMessageToContentScript({
+      type: EXTERNAL_SERVICE_TYPES.REQUEST_CONNECTION_STATUS,
+    });
+  } catch (e) {
+    console.error(e);
+  }
+
+  return { isConnected: response.isConnected };
+};
+
+export const requestAllowedStatus = async (): Promise<{
+  isAllowed: boolean;
+  error?: FreighterApiError;
+}> => {
+  let response;
+
+  try {
+    response = await sendMessageToContentScript({
+      type: EXTERNAL_SERVICE_TYPES.REQUEST_ALLOWED_STATUS,
+    });
+  } catch (e) {
+    console.error(e);
+  }
+
+  const { isAllowed } = response || { isAllowed: false };
+
+  return { isAllowed, error: response?.apiError };
+};
+
+export const setAllowedStatus = async (): Promise<{
+  isAllowed: boolean;
+  error?: FreighterApiError;
+}> => {
+  let response;
+
+  try {
+    response = await sendMessageToContentScript({
+      type: EXTERNAL_SERVICE_TYPES.SET_ALLOWED_STATUS,
+    });
+  } catch (e) {
+    console.error(e);
+  }
+
+  const { isAllowed } = response || {
+    isAllowed: false,
+  };
+
+  return { isAllowed, error: response?.apiError };
 };

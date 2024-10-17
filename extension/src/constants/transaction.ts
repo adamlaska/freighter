@@ -11,6 +11,11 @@ export enum OPERATION_TYPES {
   createClaimableBalance = "Create Claimable Balance",
   createPassiveSellOffer = "Create Passive Sell Offer",
   endSponsoringFutureReserves = "End Sponsoring Future Reserves",
+  extendFootprintTtl = "Extend Footprint TTL",
+  inflation = "Inflation",
+  invokeHostFunction = "Invoke Host Function",
+  liquidityPoolDeposit = "Liquidity Pool Deposit",
+  liquidityPoolWithdraw = "Liquidity Pool Withdraw",
   manageBuyOffer = "Manage Buy Offer",
   manageData = "Manage Data",
   manageSellOffer = "Manage Sell Offer",
@@ -22,14 +27,15 @@ export enum OPERATION_TYPES {
   revokeDataSponsorship = "Revoke Data Sponsorship",
   revokeOfferSponsorship = "Revoke Offer Sponsorship",
   revokeSignerSponsorship = "Revoke Signer Sponsorship",
+  revokeSponsorship = "Revoke Sponsorship",
   revokeTrustlineSponsorship = "Revoke Trustline Sponsorship",
   setOptions = "Set Options",
   setTrustLineFlags = "Set Trustline Flags",
+  bumpFootprintExpiration = "Bump Footprint Expiration",
+  restoreFootprint = "Restore Footprint",
 }
 
 export enum TRANSACTION_WARNING {
-  malicious = "malicious",
-  unsafe = "unsafe",
   memoRequired = "memo-required",
 }
 

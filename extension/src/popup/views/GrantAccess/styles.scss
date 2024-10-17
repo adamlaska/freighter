@@ -1,0 +1,25 @@
+.GrantAccess {
+  &__SigningWith {
+    display: flex;
+    flex-direction: column;
+    min-width: 300px;
+  }
+
+  &__PublicKey {
+    padding: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 7px;
+    border: 1px solid;
+    margin-top: 10px;
+    border-color: var(--color-gray-40);
+  }
+
+  &__loader {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+}

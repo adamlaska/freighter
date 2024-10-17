@@ -1,0 +1,35 @@
+.Settings {
+  display: flex;
+  flex-direction: column;
+
+  &__header {
+    margin-bottom: 2rem;
+  }
+
+  &__version {
+    color: var(--color-gray-60);
+    font-size: 0.875rem;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  &__icon {
+    display: flex;
+    align-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+
+    &__preferences {
+      fill: var(--color-gray-60);
+    }
+  }
+
+  &__logout {
+    color: var(--color-red-50);
+    cursor: pointer;
+  }
+}

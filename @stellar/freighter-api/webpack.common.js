@@ -1,6 +1,5 @@
 const webpack = require("webpack");
 const TsconfigPathsPlugin = require("tsconfig-paths-webpack-plugin");
-const ModuleReplaceWebpackPlugin = require("module-replace-webpack-plugin");
 const path = require("path");
 const { DEFAULT_STATS } = require("../../config/webpack");
 
@@ -19,7 +18,7 @@ const config = {
     filename: "[name].min.js",
   },
   resolve: {
-    extensions: [".ts"],
+    extensions: [".ts", ".js"],
     plugins: [
       new TsconfigPathsPlugin({
         configFile: path.resolve(__dirname, "./tsconfig.json"),
@@ -41,14 +40,10 @@ const config = {
     new webpack.DefinePlugin({
       DEV_SERVER: false,
     }),
-    new ModuleReplaceWebpackPlugin({
-      modules: [
-        {
-          test: /webextension-polyfill-ts/,
-          replace: "../../config/shims/webextension-polyfill.ts",
-        },
-      ],
-    }),
+    new webpack.NormalModuleReplacementPlugin(
+      /webextension-polyfill/,
+      path.resolve(__dirname, "../../config/shims/webextension-polyfill.ts")
+    ),
   ],
   stats: DEFAULT_STATS,
 };
