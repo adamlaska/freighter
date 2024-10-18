@@ -1,55 +1,57 @@
 import React, { useState } from "react";
+import { useSelector } from "react-redux";
 import shuffle from "lodash/shuffle";
-import styled from "styled-components";
+import { Redirect } from "react-router-dom";
 
-import { emitMetric } from "helpers/metrics";
-import { useMnemonicPhrase } from "popup/helpers/useMnemonicPhrase";
+import { APPLICATION_STATE } from "@shared/constants/applicationState";
 
-import { METRIC_NAMES } from "popup/constants/metricsNames";
-
-import { Header } from "popup/components/Header";
+import { ROUTES } from "popup/constants/routes";
 import { Onboarding } from "popup/components/Onboarding";
 import { ConfirmMnemonicPhrase } from "popup/components/mnemonicPhrase/ConfirmMnemonicPhrase";
 import { DisplayMnemonicPhrase } from "popup/components/mnemonicPhrase/DisplayMnemonicPhrase";
+import { applicationStateSelector } from "popup/ducks/accountServices";
+import { View } from "popup/basics/layout/View";
 
-import ImportWalletIllo from "popup/assets/illo-backup-phrase.svg";
+interface MnemonicPhraseProps {
+  mnemonicPhrase: string;
+}
 
-const IconImgEl = styled.img`
-  height: 7.5rem;
-`;
+export const MnemonicPhrase = ({
+  mnemonicPhrase = "",
+}: MnemonicPhraseProps) => {
+  const applicationState = useSelector(applicationStateSelector);
+  const [isConfirmed, setIsConfirmed] = useState(false);
 
-const IconEl = () => <IconImgEl src={ImportWalletIllo} alt="Import wallet" />;
-
-export const MnemonicPhrase = () => {
-  const [readyToConfirm, setReadyToConfirm] = useState(false);
-
-  const mnemonicPhrase = useMnemonicPhrase();
+  if (applicationState === APPLICATION_STATE.MNEMONIC_PHRASE_CONFIRMED) {
+    return <Redirect to={ROUTES.pinExtension} />;
+  }
 
   if (mnemonicPhrase) {
-    return (
-      <>
-        <Header />
-        {readyToConfirm ? (
-          <Onboarding
-            header="Confirm your backup phrase"
-            icon={<IconEl />}
-            subheader="Select each word in the correct order to confirm you got them right"
-            goBack={() => {
-              setReadyToConfirm(false);
-              emitMetric(METRIC_NAMES.accountCreatorConfirmMnemonicBack);
-            }}
-          >
-            <ConfirmMnemonicPhrase words={shuffle(mnemonicPhrase.split(" "))} />
-          </Onboarding>
-        ) : (
-          <Onboarding header="Backup phrase" icon={<IconEl />}>
-            <DisplayMnemonicPhrase
-              mnemonicPhrase={mnemonicPhrase}
-              setReadyToConfirm={setReadyToConfirm}
+    return isConfirmed ? (
+      <React.Fragment>
+        <View.Header />
+        <View.Content alignment="center">
+          <Onboarding layout="full" customWidth="31rem">
+            <ConfirmMnemonicPhrase
+              words={shuffle(mnemonicPhrase.split(" "))}
+              customBackAction={() => setIsConfirmed(false)}
+              hasGoBackBtn
             />
           </Onboarding>
-        )}
-      </>
+        </View.Content>
+      </React.Fragment>
+    ) : (
+      <React.Fragment>
+        <View.Header />
+        <View.Content alignment="center">
+          <Onboarding layout="full">
+            <DisplayMnemonicPhrase
+              mnemonicPhrase={mnemonicPhrase}
+              setIsConfirmed={setIsConfirmed}
+            />
+          </Onboarding>
+        </View.Content>
+      </React.Fragment>
     );
   }
 

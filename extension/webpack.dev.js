@@ -1,28 +1,27 @@
-const merge = require("webpack-merge");
+const { merge } = require("webpack-merge");
 const webpack = require("webpack");
-const ModuleReplaceWebpackPlugin = require("module-replace-webpack-plugin");
+const path = require("path");
+const Dotenv = require("dotenv-webpack");
+
 const { BUILD_PATH, commonConfig } = require("./webpack.common.js");
 
 const devConfig = {
   mode: "development",
-  devtool: "inline-source-map",
+  devtool: "cheap-source-map",
   devServer: {
-    contentBase: BUILD_PATH,
-    disableHostCheck: true,
+    static: BUILD_PATH,
     port: 9000,
   },
   plugins: [
     new webpack.DefinePlugin({
       DEV_SERVER: true,
+      DEV_EXTENSION: true,
     }),
-    new ModuleReplaceWebpackPlugin({
-      modules: [
-        {
-          test: /webextension-polyfill-ts/,
-          replace: "../config/shims/webextension-polyfill.ts",
-        },
-      ],
-    }),
+    new webpack.NormalModuleReplacementPlugin(
+      /webextension-polyfill/,
+      path.resolve(__dirname, "../config/shims/webextension-polyfill.ts"),
+    ),
+    new Dotenv(),
   ],
 };
 
