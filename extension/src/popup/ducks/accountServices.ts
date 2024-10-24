@@ -3,39 +3,55 @@ import {
   createSelector,
   createSlice,
 } from "@reduxjs/toolkit";
+import * as Sentry from "@sentry/browser";
+import { Networks } from "stellar-sdk";
+
 import { APPLICATION_STATE } from "@shared/constants/applicationState";
 import {
   addAccount as addAccountService,
   importAccount as importAccountService,
+  importHardwareWallet as importHardwareWalletService,
   makeAccountActive as makeAccountActiveService,
   updateAccountName as updateAccountNameService,
   confirmMnemonicPhrase as confirmMnemonicPhraseService,
+  confirmMigratedMnemonicPhrase as confirmMigratedMnemonicPhraseService,
   createAccount as createAccountService,
   fundAccount as fundAccountService,
   recoverAccount as recoverAccountService,
   loadAccount as loadAccountService,
   confirmPassword as confirmPasswordService,
   signOut as signOutService,
+  addTokenId as addTokenIdService,
+  migrateAccounts as migrateAccountsService,
 } from "@shared/api/internal";
-import { Account } from "@shared/api/types";
+import {
+  Account,
+  AccountType,
+  ActionStatus,
+  BalanceToMigrate,
+  ErrorMessage,
+  MigratedAccount,
+} from "@shared/api/types";
+import { WalletType } from "@shared/constants/hardwareWallet";
 
-interface ErrorMessage {
-  errorMessage: string;
-}
+import { AppState } from "popup/App";
+import { METRICS_DATA } from "constants/localStorageTypes";
+import { MetricsData } from "helpers/metrics";
 
 export const createAccount = createAsyncThunk<
-  { allAccounts: Array<Account>; publicKey: string },
+  { allAccounts: Account[]; publicKey: string },
   string,
   { rejectValue: ErrorMessage }
 >("auth/createAccount", async (password, thunkApi) => {
-  let res = { allAccounts: [] as Array<Account>, publicKey: "" };
+  let res = { allAccounts: [] as Account[], publicKey: "" };
 
   try {
     res = await createAccountService(password);
   } catch (e) {
-    console.error("Failed when creating an account: ", e.message);
+    const message = e instanceof Error ? e.message : JSON.stringify(e);
+    console.error("Failed when creating an account: ", message);
     return thunkApi.rejectWithValue({
-      errorMessage: e.message,
+      errorMessage: message,
     });
   }
   return res;
@@ -47,51 +63,105 @@ export const fundAccount = createAsyncThunk(
     try {
       await fundAccountService(publicKey);
     } catch (e) {
-      console.error("Failed when funding an account: ", e.message);
+      const message = e instanceof Error ? e.message : JSON.stringify(e);
+      console.error("Failed when funding an account: ", message);
     }
   },
 );
 
 export const addAccount = createAsyncThunk<
-  { publicKey: string; allAccounts: Array<Account> },
+  { publicKey: string; allAccounts: Account[]; hasPrivateKey: boolean },
   string,
   { rejectValue: ErrorMessage }
 >("auth/addAccount", async (password, thunkApi) => {
-  let res = { publicKey: "", allAccounts: [] as Array<Account> };
+  let res = {
+    publicKey: "",
+    allAccounts: [] as Account[],
+    hasPrivateKey: false,
+  };
 
   try {
     res = await addAccountService(password);
   } catch (e) {
-    console.error("Failed when creating an account: ", e.message);
+    const message = e instanceof Error ? e.message : JSON.stringify(e);
+    console.error("Failed when creating an account: ", message);
     return thunkApi.rejectWithValue({
-      errorMessage: e.message,
+      errorMessage: message,
     });
   }
   return res;
 });
 
 export const importAccount = createAsyncThunk<
-  { publicKey: string; allAccounts: Array<Account> },
+  { publicKey: string; allAccounts: Account[]; hasPrivateKey: boolean },
   { password: string; privateKey: string },
   { rejectValue: ErrorMessage }
 >("auth/importAccount", async ({ password, privateKey }, thunkApi) => {
-  let res = { publicKey: "", allAccounts: [] as Array<Account> };
+  let res = {
+    publicKey: "",
+    allAccounts: [] as Account[],
+    hasPrivateKey: false,
+  };
 
   try {
     res = await importAccountService(password, privateKey);
   } catch (e) {
     console.error("Failed when importing an account: ", e);
+    const message = e instanceof Error ? e.message : JSON.stringify(e);
     return thunkApi.rejectWithValue({
-      errorMessage: e.message,
+      errorMessage: message,
     });
   }
   return res;
 });
 
-export const makeAccountActive = createAsyncThunk(
-  "auth/makeAccountActive",
-  (publicKey: string) => makeAccountActiveService(publicKey),
+export const importHardwareWallet = createAsyncThunk<
+  {
+    publicKey: string;
+    allAccounts: Account[];
+    hasPrivateKey: boolean;
+    bipPath: string;
+  },
+  { publicKey: string; hardwareWalletType: WalletType; bipPath: string },
+  { rejectValue: ErrorMessage }
+>(
+  "auth/importHardwareWallet",
+  async ({ publicKey, hardwareWalletType, bipPath }, thunkApi) => {
+    let res = {
+      publicKey: "",
+      allAccounts: [] as Account[],
+      hasPrivateKey: false,
+      bipPath: "",
+    };
+    try {
+      res = await importHardwareWalletService(
+        publicKey,
+        hardwareWalletType,
+        bipPath,
+      );
+    } catch (e) {
+      console.error("Failed when importing hardware wallet: ", e);
+      const message = e instanceof Error ? e.message : JSON.stringify(e);
+      return thunkApi.rejectWithValue({ errorMessage: message });
+    }
+    return res;
+  },
 );
+
+export const makeAccountActive = createAsyncThunk<
+  { publicKey: string; hasPrivateKey: boolean; bipPath: string },
+  string,
+  { rejectValue: ErrorMessage; state: AppState }
+>("auth/makeAccountActive", async (publicKey: string, thunkApi) => {
+  try {
+    const res = await makeAccountActiveService(publicKey);
+    const { allAccounts } = authSelector(thunkApi.getState());
+    storeAccountMetricsData(publicKey, allAccounts);
+    return res;
+  } catch (e) {
+    return thunkApi.rejectWithValue({ errorMessage: e as string });
+  }
+});
 
 export const updateAccountName = createAsyncThunk(
   "auth/updateAccountName",
@@ -99,27 +169,38 @@ export const updateAccountName = createAsyncThunk(
 );
 
 export const recoverAccount = createAsyncThunk<
-  { allAccounts: Array<Account>; publicKey: string },
+  {
+    allAccounts: Account[];
+    hasPrivateKey: boolean;
+    publicKey: string;
+    error: string;
+  },
   {
     password: string;
     mnemonicPhrase: string;
   },
   { rejectValue: ErrorMessage }
 >("auth/recoverAccount", async ({ password, mnemonicPhrase }, thunkApi) => {
-  let res = { allAccounts: [] as Array<Account>, publicKey: "" };
+  let res = {
+    allAccounts: [] as Account[],
+    publicKey: "",
+    hasPrivateKey: false,
+    error: "",
+  };
 
   try {
     res = await recoverAccountService(password, mnemonicPhrase);
   } catch (e) {
-    console.error("Failed when recovering an account: ", e.message);
+    const message = e instanceof Error ? e.message : JSON.stringify(e);
+    console.error("Failed when recovering an account: ", message);
     return thunkApi.rejectWithValue({
-      errorMessage: e.message,
+      errorMessage: message,
     });
   }
 
-  if (!res.publicKey) {
+  if (!res.publicKey || res.error) {
     return thunkApi.rejectWithValue({
-      errorMessage: "The phrase you entered is incorrect",
+      errorMessage: res.error || "The phrase you entered is incorrect",
     });
   }
 
@@ -141,10 +222,11 @@ export const confirmMnemonicPhrase = createAsyncThunk<
     try {
       res = await confirmMnemonicPhraseService(phrase);
     } catch (e) {
-      console.error("Failed when confirming Mnemonic Phrase: ", e.message);
+      const message = e instanceof Error ? e.message : JSON.stringify(e);
+      console.error("Failed when confirming Mnemonic Phrase: ", message);
       return thunkApi.rejectWithValue({
         applicationState: res.applicationState,
-        errorMessage: e.message,
+        errorMessage: message,
       });
     }
 
@@ -156,8 +238,42 @@ export const confirmMnemonicPhrase = createAsyncThunk<
     } else {
       return thunkApi.rejectWithValue({
         applicationState: res.applicationState,
-        errorMessage:
-          "The secret phrase you entered is invalid, please check the phrase you have noted and try again.",
+        errorMessage: "The secret phrase you entered is incorrect.",
+      });
+    }
+
+    return res;
+  },
+);
+
+export const confirmMigratedMnemonicPhrase = createAsyncThunk<
+  { isCorrectPhrase: boolean },
+  string,
+  { rejectValue: ErrorMessage }
+>(
+  "auth/confirmMigratedMnemonicPhrase",
+
+  async (phrase: string, thunkApi) => {
+    let res = {
+      isCorrectPhrase: false,
+    };
+    try {
+      res = await confirmMigratedMnemonicPhraseService(phrase);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : JSON.stringify(e);
+      console.error("Failed when confirming Mnemonic Phrase: ", message);
+      return thunkApi.rejectWithValue({
+        errorMessage: message,
+      });
+    }
+
+    if (res.isCorrectPhrase) {
+      res = {
+        isCorrectPhrase: true,
+      };
+    } else {
+      return thunkApi.rejectWithValue({
+        errorMessage: "The secret phrase you entered is incorrect.",
       });
     }
 
@@ -170,7 +286,8 @@ export const confirmPassword = createAsyncThunk<
     publicKey: string;
     hasPrivateKey: boolean;
     applicationState: APPLICATION_STATE;
-    allAccounts: Array<Account>;
+    allAccounts: Account[];
+    bipPath: string;
   },
   string,
   { rejectValue: ErrorMessage }
@@ -179,14 +296,16 @@ export const confirmPassword = createAsyncThunk<
     publicKey: "",
     hasPrivateKey: false,
     applicationState: APPLICATION_STATE.MNEMONIC_PHRASE_CONFIRMED,
-    allAccounts: [] as Array<Account>,
+    allAccounts: [] as Account[],
+    bipPath: "",
   };
   try {
     res = await confirmPasswordService(phrase);
   } catch (e) {
-    console.error("Failed when confirming a password: ", e.message);
+    const message = e instanceof Error ? e.message : JSON.stringify(e);
+    console.error("Failed when confirming a password: ", message);
     return thunkApi.rejectWithValue({
-      errorMessage: e.message,
+      errorMessage: message,
     });
   }
   if (!res.publicKey) {
@@ -198,8 +317,54 @@ export const confirmPassword = createAsyncThunk<
   return res;
 });
 
-export const loadAccount = createAsyncThunk("auth/loadAccount", () =>
-  loadAccountService(),
+const storeAccountMetricsData = (publicKey: string, allAccounts: Account[]) => {
+  const metricsData: MetricsData = JSON.parse(
+    localStorage.getItem(METRICS_DATA) || "{}",
+  );
+
+  let accountType = AccountType.FREIGHTER;
+  allAccounts.forEach((acc: Account) => {
+    if (acc.hardwareWalletType) {
+      metricsData.hwExists = true;
+    } else if (acc.imported) {
+      metricsData.importedExists = true;
+    }
+
+    if (acc.publicKey === publicKey) {
+      if (acc.hardwareWalletType) {
+        accountType = AccountType.HW;
+      } else if (acc.imported) {
+        accountType = AccountType.IMPORTED;
+      } else {
+        accountType = AccountType.FREIGHTER;
+      }
+    }
+  });
+  metricsData.accountType = accountType;
+  localStorage.setItem(METRICS_DATA, JSON.stringify(metricsData));
+};
+
+export const loadAccount = createAsyncThunk(
+  "auth/loadAccount",
+  async (_arg, thunkApi) => {
+    let res;
+    let error;
+    try {
+      res = await loadAccountService();
+      storeAccountMetricsData(res.publicKey, res.allAccounts);
+      return res;
+    } catch (e) {
+      console.error(e);
+      error = e;
+      Sentry.captureException(`Error loading account: ${error}`);
+    }
+
+    if (!res) {
+      return thunkApi.rejectWithValue({ errorMessage: error });
+    }
+
+    return res;
+  },
 );
 
 export const signOut = createAsyncThunk<
@@ -226,20 +391,94 @@ export const signOut = createAsyncThunk<
   return res?.applicationState;
 });
 
+export const addTokenId = createAsyncThunk<
+  { tokenIdList: string[] },
+  { publicKey: string; tokenId: string; network: Networks },
+  { rejectValue: ErrorMessage }
+>("auth/addToken", async ({ publicKey, tokenId, network }, thunkApi) => {
+  let res = {
+    tokenIdList: [] as string[],
+  };
+
+  try {
+    res = await addTokenIdService(publicKey, tokenId, network);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : JSON.stringify(e);
+    console.error("Failed when adding a token: ", message);
+    return thunkApi.rejectWithValue({
+      errorMessage: message,
+    });
+  }
+  return res;
+});
+
+export const migrateAccounts = createAsyncThunk<
+  {
+    allAccounts: Account[];
+    migratedAccounts: MigratedAccount[];
+    hasPrivateKey: boolean;
+    publicKey: string;
+    error: string;
+  },
+  {
+    balancesToMigrate: BalanceToMigrate[];
+    isMergeSelected: boolean;
+    recommendedFee: string;
+  },
+  { rejectValue: ErrorMessage }
+>(
+  "auth/migrateAccounts",
+  async ({ balancesToMigrate, isMergeSelected, recommendedFee }, thunkApi) => {
+    let res = {
+      migratedAccounts: [] as MigratedAccount[],
+      allAccounts: [] as Account[],
+      publicKey: "",
+      hasPrivateKey: false,
+      error: "",
+    };
+
+    try {
+      res = await migrateAccountsService({
+        balancesToMigrate,
+        isMergeSelected,
+        recommendedFee,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : JSON.stringify(e);
+      console.error("Failed when migrating an account: ", message);
+      return thunkApi.rejectWithValue({
+        errorMessage: message,
+      });
+    }
+
+    return res;
+  },
+);
+
 interface InitialState {
-  allAccounts: Array<Account>;
+  allAccounts: Account[];
+  migratedAccounts: MigratedAccount[];
   applicationState: APPLICATION_STATE;
   hasPrivateKey: boolean;
   publicKey: string;
+  connectingWalletType: WalletType;
+  bipPath: string;
+  tokenIdList: string[];
   error: string;
+  accountStatus: ActionStatus;
 }
 
 const initialState: InitialState = {
   allAccounts: [],
+  migratedAccounts: [],
   applicationState: APPLICATION_STATE.APPLICATION_LOADING,
-  publicKey: "",
-  error: "",
   hasPrivateKey: false,
+  publicKey: "",
+  connectingWalletType: WalletType.NONE,
+  bipPath: "",
+  tokenIdList: [],
+  error: "",
+  accountStatus: ActionStatus.IDLE,
 };
 
 const authSlice = createSlice({
@@ -248,6 +487,9 @@ const authSlice = createSlice({
   reducers: {
     clearApiError(state) {
       state.error = "";
+    },
+    setConnectingWalletType(state, action) {
+      state.connectingWalletType = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -273,16 +515,20 @@ const authSlice = createSlice({
       };
     });
     builder.addCase(addAccount.fulfilled, (state, action) => {
-      const { publicKey, allAccounts } = action.payload || {
+      const { publicKey, allAccounts, hasPrivateKey } = action.payload || {
         publicKey: "",
         allAccounts: [],
+        hasPrivateKey: false,
       };
 
       return {
         ...state,
         error: "",
+        // to be safe lets clear bipPath here, which is only for hWs
+        bipPath: "",
         publicKey,
         allAccounts,
+        hasPrivateKey,
       };
     });
     builder.addCase(addAccount.rejected, (state, action) => {
@@ -294,16 +540,20 @@ const authSlice = createSlice({
       };
     });
     builder.addCase(importAccount.fulfilled, (state, action) => {
-      const { publicKey, allAccounts } = action.payload || {
+      const { publicKey, allAccounts, hasPrivateKey } = action.payload || {
         publicKey: "",
         allAccounts: [],
+        hasPrivateKey: false,
       };
 
       return {
         ...state,
         error: "",
+        // to be safe lets clear bipPath here, which is only for hWs
+        bipPath: "",
         publicKey,
         allAccounts,
+        hasPrivateKey,
       };
     });
     builder.addCase(importAccount.rejected, (state, action) => {
@@ -314,26 +564,52 @@ const authSlice = createSlice({
         error: errorMessage,
       };
     });
+    builder.addCase(importHardwareWallet.fulfilled, (state, action) => {
+      const { publicKey, allAccounts, hasPrivateKey, bipPath } = action.payload;
+      return {
+        ...state,
+        error: "",
+        publicKey,
+        allAccounts,
+        hasPrivateKey,
+        bipPath,
+      };
+    });
+    builder.addCase(importHardwareWallet.rejected, (state, action) => {
+      const { errorMessage } = action.payload || { errorMessage: "" };
+
+      return {
+        ...state,
+        error: errorMessage,
+      };
+    });
+    builder.addCase(makeAccountActive.pending, (state) => ({
+      ...state,
+      accountStatus: ActionStatus.PENDING,
+    }));
     builder.addCase(makeAccountActive.fulfilled, (state, action) => {
-      const { publicKey, hasPrivateKey } = action.payload || {
+      const { publicKey, hasPrivateKey, bipPath } = action.payload || {
         publicKey: "",
         hasPrivateKey: false,
+        bipPath: "",
       };
 
       return {
         ...state,
         publicKey,
         hasPrivateKey,
+        bipPath,
+        accountStatus: ActionStatus.SUCCESS,
       };
     });
     builder.addCase(makeAccountActive.rejected, (state, action) => {
-      const {
-        message = "Freighter was unable to switch to this account",
-      } = action.error;
+      const { message = "Freighter was unable to switch to this account" } =
+        action.error;
 
       return {
         ...state,
         error: message,
+        accountStatus: ActionStatus.ERROR,
       };
     });
     builder.addCase(updateAccountName.fulfilled, (state, action) => {
@@ -347,9 +623,8 @@ const authSlice = createSlice({
       };
     });
     builder.addCase(updateAccountName.rejected, (state, action) => {
-      const {
-        message = "Freighter was unable update this account's name",
-      } = action.error;
+      const { message = "Freighter was unable update this account's name" } =
+        action.error;
 
       return {
         ...state,
@@ -357,15 +632,17 @@ const authSlice = createSlice({
       };
     });
     builder.addCase(recoverAccount.fulfilled, (state, action) => {
-      const { publicKey, allAccounts } = action.payload || {
+      const { publicKey, allAccounts, hasPrivateKey } = action.payload || {
         publicKey: "",
         allAccounts: [],
+        hasPrivateKey: false,
       };
 
       return {
         ...state,
         error: "",
         allAccounts,
+        hasPrivateKey,
         applicationState: APPLICATION_STATE.MNEMONIC_PHRASE_CONFIRMED,
         publicKey,
       };
@@ -394,17 +671,31 @@ const authSlice = createSlice({
       ...state,
       applicationState: action.payload.applicationState,
     }));
+    builder.addCase(confirmMigratedMnemonicPhrase.rejected, (state, action) => {
+      const { errorMessage } = action.payload || {
+        errorMessage: "",
+      };
+
+      return {
+        ...state,
+        error: errorMessage,
+      };
+    });
     builder.addCase(loadAccount.fulfilled, (state, action) => {
       const {
         hasPrivateKey,
         publicKey,
         applicationState,
         allAccounts,
+        bipPath,
+        tokenIdList,
       } = action.payload || {
         hasPrivateKey: false,
         publicKey: "",
         applicationState: APPLICATION_STATE.APPLICATION_STARTED,
         allAccounts: [],
+        bipPath: "",
+        tokenIdList: [],
       };
       return {
         ...state,
@@ -413,6 +704,8 @@ const authSlice = createSlice({
           applicationState || APPLICATION_STATE.APPLICATION_STARTED,
         publicKey,
         allAccounts,
+        bipPath,
+        tokenIdList,
       };
     });
     builder.addCase(loadAccount.rejected, (state, action) => {
@@ -439,11 +732,13 @@ const authSlice = createSlice({
         applicationState,
         hasPrivateKey,
         allAccounts,
+        bipPath,
       } = action.payload || {
         publicKey: "",
         hasPrivateKey: false,
         applicationState: APPLICATION_STATE.MNEMONIC_PHRASE_CONFIRMED,
         allAccounts: [""],
+        bipPath: "",
       };
       return {
         ...state,
@@ -452,6 +747,8 @@ const authSlice = createSlice({
           applicationState || APPLICATION_STATE.MNEMONIC_PHRASE_CONFIRMED,
         publicKey,
         allAccounts,
+        bipPath,
+        error: "",
       };
     });
     builder.addCase(signOut.fulfilled, (_state, action) => {
@@ -462,6 +759,51 @@ const authSlice = createSlice({
         ...initialState,
         applicationState:
           applicationState || APPLICATION_STATE.MNEMONIC_PHRASE_CONFIRMED,
+      };
+    });
+    builder.addCase(addTokenId.fulfilled, (state, action) => {
+      const { tokenIdList } = action.payload || {
+        tokenIdList: [],
+      };
+
+      return {
+        ...state,
+        error: "",
+        tokenIdList,
+      };
+    });
+    builder.addCase(addTokenId.rejected, (state, action) => {
+      const { errorMessage } = action.payload || { errorMessage: "" };
+
+      return {
+        ...state,
+        error: errorMessage,
+      };
+    });
+    builder.addCase(migrateAccounts.fulfilled, (state, action) => {
+      const { publicKey, allAccounts, migratedAccounts, hasPrivateKey } =
+        action.payload || {
+          publicKey: "",
+          allAccounts: [],
+          migratedAccounts: [],
+          hasPrivateKey: false,
+        };
+
+      return {
+        ...state,
+        error: "",
+        allAccounts,
+        migratedAccounts,
+        hasPrivateKey,
+        publicKey,
+      };
+    });
+    builder.addCase(migrateAccounts.rejected, (state, action) => {
+      const { errorMessage } = action.payload || { errorMessage: "" };
+
+      return {
+        ...state,
+        error: errorMessage,
       };
     });
   },
@@ -489,6 +831,14 @@ export const publicKeySelector = createSelector(
   authSelector,
   (auth: InitialState) => auth.publicKey,
 );
+export const bipPathSelector = createSelector(
+  authSelector,
+  (auth: InitialState) => auth.bipPath,
+);
+export const migratedAccountsSelector = createSelector(
+  authSelector,
+  (auth: InitialState) => auth.migratedAccounts,
+);
 
 export const accountNameSelector = createSelector(
   publicKeySelector,
@@ -502,6 +852,22 @@ export const accountNameSelector = createSelector(
   },
 );
 
-export const { clearApiError } = authSlice.actions;
+export const hardwareWalletTypeSelector = createSelector(
+  publicKeySelector,
+  allAccountsSelector,
+  (publicKey, allAccounts) => {
+    const account = allAccounts.find(
+      ({ publicKey: accountPublicKey }) => accountPublicKey === publicKey,
+    ) || { hardwareWalletType: WalletType.NONE };
+    return account.hardwareWalletType;
+  },
+);
+
+export const accountStatusSelector = createSelector(
+  authSelector,
+  (auth: InitialState) => auth.accountStatus,
+);
+
+export const { clearApiError, setConnectingWalletType } = authSlice.actions;
 
 export { reducer };

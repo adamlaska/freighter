@@ -1,17 +1,32 @@
 const PLAYGROUND_BASE_PATH = "playground";
 const playgroundPaths = [
   "isConnected",
-  "getPublicKey",
+  "isAllowed",
+  "setAllowed",
+  "requestAccess",
+  "getAddress",
   "getNetwork",
+  "getNetworkDetails",
   "signTransaction",
+  "signAuthEntry",
+  "signMessage",
+  "watchWalletChanges",
 ];
 
 const GUIDE_BASE_PATH = "guide";
-const guidePaths = [
-  "introduction",
-  "gettingStarted",
-  "usingFreighterNode",
+const introPaths = ["introduction", "gettingStarted"];
+const userGuidePaths = [
+  "account",
+  "advancedSettings",
+  "addAsset",
+  "makePayment",
+  "signXdr",
+];
+const techGuidePaths = [
+  "usingFreighterWebApp",
   "usingFreighterBrowser",
+  "developingForSoroban",
+  "thirdPartyIntegration",
 ];
 
 const constructPaths = (paths, basePath) =>
@@ -19,7 +34,9 @@ const constructPaths = (paths, basePath) =>
 
 module.exports = {
   someSidebar: {
-    "User Guide": constructPaths(guidePaths, GUIDE_BASE_PATH),
+    Introduction: constructPaths(introPaths, GUIDE_BASE_PATH),
+    "User Guide": constructPaths(userGuidePaths, GUIDE_BASE_PATH),
+    "Technical Guide": constructPaths(techGuidePaths, GUIDE_BASE_PATH),
     Playground: constructPaths(playgroundPaths, PLAYGROUND_BASE_PATH),
   },
 };

@@ -1,25 +1,19 @@
-import { store } from "background/store";
-import {
-  grantAccountAccess,
-  timeoutAccountAccess,
-} from "background/ducks/session";
+import browser from "webextension-polyfill";
 
-const SESSION_LENGTH = 5;
+// 24 hours
+const SESSION_LENGTH = 60 * 24;
+export const SESSION_ALARM_NAME = "session-timer";
 
 export class SessionTimer {
-  DURATION = 1000 * 60 * SESSION_LENGTH;
+  duration = 1000 * 60 * SESSION_LENGTH;
   runningTimeout: null | ReturnType<typeof setTimeout> = null;
   constructor(duration?: number) {
-    this.DURATION = duration || this.DURATION;
+    this.duration = duration || this.duration;
   }
 
-  startSession(key: { privateKey: string }) {
-    if (this.runningTimeout) {
-      clearTimeout(this.runningTimeout);
-    }
-    store.dispatch(grantAccountAccess(key));
-    this.runningTimeout = setTimeout(() => {
-      store.dispatch(timeoutAccountAccess());
-    }, this.DURATION);
+  startSession() {
+    browser?.alarms.create(SESSION_ALARM_NAME, {
+      delayInMinutes: SESSION_LENGTH,
+    });
   }
 }

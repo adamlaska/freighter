@@ -1,18 +1,24 @@
-import * as apiExternal from "@shared/api/external";
+import * as extensionMessaging from "@shared/api/helpers/extensionMessaging";
 import { getNetwork } from "../getNetwork";
 
 describe("getNetwork", () => {
   it("returns a network", async () => {
-    const TEST_NETWORK = "PUBLIC";
-    apiExternal.getNetwork = jest.fn().mockReturnValue(TEST_NETWORK);
-    const network = await getNetwork();
-    expect(network).toBe(TEST_NETWORK);
-  });
-  it("throws an error", () => {
-    const TEST_ERROR = "Error!";
-    apiExternal.getNetwork = jest.fn().mockImplementation(() => {
-      throw TEST_ERROR;
+    extensionMessaging.sendMessageToContentScript = jest.fn().mockReturnValue({
+      networkDetails: { network: "foo", networkPassphrase: "baz" },
     });
-    expect(getNetwork).toThrowError(TEST_ERROR);
+    const network = await getNetwork();
+    expect(network).toEqual({ network: "foo", networkPassphrase: "baz" });
+  });
+  it("returns an error", async () => {
+    extensionMessaging.sendMessageToContentScript = jest
+      .fn()
+      .mockReturnValue({ apiError: "error" });
+    const network = await getNetwork();
+
+    expect(network).toEqual({
+      network: "",
+      networkPassphrase: "",
+      error: "error",
+    });
   });
 });

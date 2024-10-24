@@ -1,5 +1,9 @@
 # Freighter
 
+Freighter is a non-custodial wallet extension that enables you to sign Stellar transactions via your browser. Learn more at [freighter.app](https://www.freighter.app/).
+
+## Yarn Workspaces
+
 This repo is constructed using yarn workspaces and consists of the 4 sections:
 
 - the browser extension (`/extension`)
@@ -11,7 +15,7 @@ This repo is constructed using yarn workspaces and consists of the 4 sections:
 
 You will need
 
-- Node (v14.11.0 or newer): https://nodejs.org/en/download/
+- Node (>=18): https://nodejs.org/en/download/
 - Yarn (v1.22.5 or newer): https://classic.yarnpkg.com/en/docs/install
 
 ## Build the extension
@@ -19,7 +23,7 @@ You will need
 To simply build a production version of the extension, install the prerequisites then navigate to this root folder in your command line and run these 2 steps:
 
 ```
-yarn
+yarn setup
 ```
 
 followed by
@@ -33,7 +37,7 @@ This will generate the files that make up the extension in `extension/build`
 ## Starting a dev environment
 
 ```
-yarn
+yarn setup
 yarn start
 ```
 
@@ -86,3 +90,23 @@ symlinks all the workspaces, so doing so will allow you to import files from the
 ### Dependencies
 
 Many dev dependencies (such as Typescript, linters, Webpack, etc.) have been moved to the root `package.json` to allow devs to upgrade these libraries all in one place.
+
+### Pushing to repo
+
+This repo will run a pre-push hook before pushing. This hook will run the cmd `yarn build:extension:translations` to check if any strings in the extension need to be added to the translations JSON. If there is no need to update the translations JSON, the push will go through. If there is a need to update, the changes will be automatically committed to your branch and the push will be aborted. You will need to run `git push` again.
+
+NOTE: If you're using nvm and run into an error where the git hook is using an incompatible version of node, create a file `~/.huskryc` on your system and added the following:
+
+```
+# This loads nvm.sh, sets the correct PATH before running hook, and ensures the project version of Node
+export NVM_DIR="$HOME/.nvm"
+
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+# If you have an .nvmrc file, we use the relevant node version
+if [[ -f ".nvmrc" ]]; then
+  nvm use
+fi
+```
+
+This will instruct the git hook to use the .nvmrc found in this repo.

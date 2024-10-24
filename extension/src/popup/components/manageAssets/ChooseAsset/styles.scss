@@ -1,0 +1,37 @@
+.ChooseAsset {
+  &__loader {
+    height: 100%;
+    width: 100%;
+    z-index: calc(var(--back--button-z-index) + 1);
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    top: 0;
+    left: 0;
+  }
+
+  &__wrapper {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__assets {
+    flex-grow: 1;
+
+    &--short {
+      flex-grow: 1;
+    }
+  }
+
+  &__button {
+    a {
+      color: var(--color-gray-90);
+    }
+
+    button {
+      text-wrap: nowrap;
+    }
+  }
+}
