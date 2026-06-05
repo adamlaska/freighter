@@ -73,7 +73,7 @@
     "@types/jest": "29.5.14",
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.3",
-    "@types/styled-components": "5.1.4",
+    "@types/styled-components": "5.1.7",
     "@typescript-eslint/eslint-plugin": "8.20.0",
     "@typescript-eslint/parser": "8.20.0",
     "@vercel/ncc": "0.38.3",
